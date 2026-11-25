@@ -1,4 +1,3 @@
-# ===== CHUNK 1 =====
 #!/usr/bin/env python3
 import os
 import shutil
@@ -360,7 +359,6 @@ FILES["app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"] = r'''
 </adaptive-icon>
 '''
 
-# ===== CHUNK 2 =====
 # ---------- DOMAIN MODELS ----------
 
 FILES["app/src/main/java/com/clipperzero/app/domain/model/AppResult.kt"] = r'''
@@ -598,7 +596,6 @@ data class ScanHistoryItem(
 )
 '''
 
-# ===== CHUNK 3 =====
 # ---------- UTILITIES ----------
 
 FILES["app/src/main/java/com/clipperzero/app/util/UrlNormalizer.kt"] = r'''
@@ -1041,7 +1038,6 @@ object SuperChatOverlayRenderer {
 }
 '''
 
-# ===== CHUNK 4 =====
 # ---------- DETECTION ENGINES ----------
 
 FILES["app/src/main/java/com/clipperzero/app/domain/engine/HeatmapEngine.kt"] = r'''
@@ -1335,14 +1331,11 @@ import com.clipperzero.app.domain.model.TranscriptSegment
 class TranscriptExcitementEngine {
 
     private val excitementTokens = listOf(
-        // English
         "no way", "oh my god", "omg", "insane", "crazy", "clutch", "unbelievable",
         "wait what", "let's go", "lets go", "wtf", "bro what", "holy", "destroyed",
         "exposed", "plot twist", "secret", "shocking", "genius", "impossible",
-        // Hindi / Hinglish
         "bhai", "kya baat", "arey", "pagal", "khatarnak", "gajab", "bawal",
         "sach mein", "maza aa gaya", "dhamaka", "ओह माय गॉड", "गजब", "कमाल", "बवाल",
-        // Bengali / Banglish
         "darun", "osthir", "ki holo", "bhai re", "amar matha", "shera", "pagol",
         "অস্থির", "দারুণ", "সেরা", "কি হলো", "বিশ্বাস", "অসম্ভব", "ভাই"
     )
@@ -1543,7 +1536,6 @@ object ViralCopyGenerator {
 }
 '''
 
-# ===== CHUNK 5 =====
 # ---------- DATA LAYER ----------
 
 FILES["app/src/main/java/com/clipperzero/app/data/PreferencesStore.kt"] = r'''
@@ -1939,7 +1931,7 @@ class AiClient {
                         val code = resp.code
                         lastError = "HTTP $code: ${ErrorSanitizer.sanitize(rawBody)}"
                         if (shouldFailover(code) && index < keys.lastIndex) {
-                            continue
+                            return@use
                         }
                         return AppResult.Error(lastError)
                     }
@@ -1959,7 +1951,6 @@ class AiClient {
 }
 '''
 
-# ===== CHUNK 6 =====
 FILES["app/src/main/java/com/clipperzero/app/data/YtDlpRepository.kt"] = r'''
 package com.clipperzero.app.data
 
@@ -2474,7 +2465,6 @@ class StorageManager(
 }
 '''
 
-# ===== CHUNK 7 =====
 FILES["app/src/main/java/com/clipperzero/app/data/ExportRepository.kt"] = r'''
 package com.clipperzero.app.data
 
@@ -2680,7 +2670,6 @@ class ExportRepository(
             return outputFile
         }
 
-        // Loudnorm fallback: retry without loudnorm if loudnorm failed
         if (job.options.audioLoudnorm) {
             onProgress(0.72f, "Retrying audio without loudnorm...")
             val fallbackArgs = buildFfmpegArgs(
@@ -2760,7 +2749,6 @@ class ExportRepository(
 }
 '''
 
-# ===== CHUNK 8 =====
 # ---------- SERVICE & DI ----------
 
 FILES["app/src/main/java/com/clipperzero/app/service/ExportForegroundService.kt"] = r'''
@@ -3027,7 +3015,6 @@ class ClipperZeroApp : Application() {
 }
 '''
 
-# ===== CHUNK 9 =====
 # ---------- VIEWMODELS ----------
 
 FILES["app/src/main/java/com/clipperzero/app/viewmodel/AiSettingsViewModel.kt"] = r'''
@@ -3580,7 +3567,6 @@ class StudioViewModel(private val container: AppContainer) : ViewModel() {
 }
 '''
 
-# ===== CHUNK 10 =====
 # ---------- THEME ----------
 
 FILES["app/src/main/java/com/clipperzero/app/ui/theme/Color.kt"] = r'''
@@ -3760,7 +3746,6 @@ fun HeatmapChart(
                 val w = size.width
                 val h = size.height
 
-                // Selected clip highlight band
                 if (selectedClip != null) {
                     val x1 = ((selectedClip.startSec / durationSec).toFloat().coerceIn(0f, 1f)) * w
                     val x2 = ((selectedClip.endSec / durationSec).toFloat().coerceIn(0f, 1f)) * w
@@ -3927,7 +3912,6 @@ fun Media3PreviewPlayer(
 }
 '''
 
-# ===== CHUNK 11 =====
 FILES["app/src/main/java/com/clipperzero/app/ui/components/ClipCard.kt"] = r'''
 package com.clipperzero.app.ui.components
 
@@ -4358,7 +4342,6 @@ private fun DockToggle(
 }
 '''
 
-# ===== CHUNK 12 =====
 FILES["app/src/main/java/com/clipperzero/app/ui/components/CustomClipDialog.kt"] = r'''
 package com.clipperzero.app.ui.components
 
@@ -4688,7 +4671,6 @@ fun AiManagerSheet(
 }
 '''
 
-# ===== CHUNK 13 =====
 # ---------- SCREENS & MAIN ACTIVITY ----------
 
 FILES["app/src/main/java/com/clipperzero/app/ui/screens/ClipStudioScreen.kt"] = r'''
@@ -5627,3 +5609,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
