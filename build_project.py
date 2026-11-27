@@ -2030,7 +2030,11 @@ class YtDlpRepository(
     suspend fun updateYtDlp(): AppResult<String> = withContext(Dispatchers.IO) {
         try {
             ensureInitialized()
-            val status = YoutubeDL.getInstance().updateYoutubeDL(context)
+            val status = try {
+                YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel.NIGHTLY)
+            } catch (_: Exception) {
+                YoutubeDL.getInstance().updateYoutubeDL(context)
+            }
             prefs.setLastYtDlpUpdateMs(System.currentTimeMillis())
             val msg = when (status) {
                 YoutubeDL.UpdateStatus.DONE -> "yt-dlp updated"
@@ -2039,7 +2043,8 @@ class YtDlpRepository(
             }
             AppResult.Success(msg)
         } catch (e: Exception) {
-            AppResult.Error(ErrorSanitizer.sanitize(e.message, "yt-dlp update failed"), e)
+            val detail = e.cause?.message ?: e.message
+            AppResult.Error(ErrorSanitizer.sanitize(detail, "yt-dlp update failed (check internet)"), e)
         }
     }
 
@@ -2075,26 +2080,22 @@ class YtDlpRepository(
         var lastError = "Unable to fetch video metadata"
         for ((label, extractorArg) in clientProfiles) {
             onStatus("Scanning metadata ($label)...")
-            val req = YoutubeDLRequest(normalized)
-            req.addOption("--skip-download")
-            req.addOption("--write-info-json")
-            req.addOption("--no-playlist")
-            req.addOption("--write-auto-subs")
-            req.addOption("--write-subs")
-            req.addOption("--sub-langs", "en,hi,bn,es,ar")
-            req.addOption("--sub-format", "vtt")
-            req.addOption("-o", File(workDir, "video.%(ext)s").absolutePath)
-            if (extractorArg != null) {
-                req.addOption("--extractor-args", extractorArg)
-            }
-            if (hasCookies()) {
-                req.addOption("--cookies", cookiesFile.absolutePath)
-            }
+            val infoFile = fetchMetadataPass(
+                normalizedUrl = normalized,
+                workDir = workDir,
+                extractorArg = extractorArg,
+                includeSubs = true,
+                tag = "scan_${label}"
+            ) ?: fetchMetadataPass(
+                normalizedUrl = normalized,
+                workDir = workDir,
+                extractorArg = extractorArg,
+                includeSubs = false,
+                tag = "scan_nosub_${label}"
+            )
 
-            try {
-                YoutubeDL.getInstance().execute(req, "scan_${label}") { _, _, _ -> }
-                val infoFile = workDir.listFiles()?.firstOrNull { it.name.endsWith(".info.json") }
-                if (infoFile != null && infoFile.exists()) {
+            if (infoFile != null && infoFile.exists()) {
+                try {
                     val infoJson = JSONObject(infoFile.readText())
                     val isLiveVod = infoJson.optBoolean("was_live", false) ||
                         infoJson.optBoolean("is_live", false) ||
@@ -2115,12 +2116,47 @@ class YtDlpRepository(
                         liveChatPath = liveChatPath
                     )
                     return@withContext AppResult.Success(metadata)
+                } catch (e: Exception) {
+                    lastError = ErrorSanitizer.sanitize(e.message, "Failed parsing metadata on $label")
                 }
-            } catch (e: Exception) {
-                lastError = ErrorSanitizer.sanitize(e.message, "Scan failed on $label")
+            } else {
+                lastError = "Metadata fetch failed on $label"
             }
         }
         AppResult.Error(lastError)
+    }
+
+    private fun fetchMetadataPass(
+        normalizedUrl: String,
+        workDir: File,
+        extractorArg: String?,
+        includeSubs: Boolean,
+        tag: String
+    ): File? {
+        val req = YoutubeDLRequest(normalizedUrl)
+        req.addOption("--skip-download")
+        req.addOption("--write-info-json")
+        req.addOption("--no-playlist")
+        req.addOption("--ignore-errors")
+        req.addOption("--no-warnings")
+        if (includeSubs) {
+            req.addOption("--write-auto-subs")
+            req.addOption("--write-subs")
+            req.addOption("--sub-langs", "en,hi,bn,es,ar")
+            req.addOption("--sub-format", "vtt")
+        }
+        req.addOption("-o", File(workDir, "video.%(ext)s").absolutePath)
+        if (extractorArg != null) {
+            req.addOption("--extractor-args", extractorArg)
+        }
+        if (hasCookies()) {
+            req.addOption("--cookies", cookiesFile.absolutePath)
+        }
+
+        runCatching {
+            YoutubeDL.getInstance().execute(req, tag) { _, _, _ -> }
+        }
+        return workDir.listFiles()?.firstOrNull { it.name.endsWith(".info.json") && it.length() > 0L }
     }
 
     private fun fetchLiveChatOnly(
@@ -2134,6 +2170,7 @@ class YtDlpRepository(
             req.addOption("--write-subs")
             req.addOption("--sub-langs", "live_chat")
             req.addOption("--no-playlist")
+            req.addOption("--ignore-errors")
             req.addOption("-o", File(workDir, "chat.%(ext)s").absolutePath)
             if (extractorArg != null) {
                 req.addOption("--extractor-args", extractorArg)
@@ -4808,12 +4845,13 @@ fun ClipStudioScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
                                 onClick = onPickCookiesFile,
-                                modifier = Modifier.heightIn(min = 48.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(
                                     1.dp,
@@ -4825,28 +4863,47 @@ fun ClipStudioScreen(
                                     contentDescription = null,
                                     tint = if (state.hasCookies) SignalEmerald else TextSecondary
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     if (state.hasCookies) "Cookies OK" else "cookies.txt",
                                     fontSize = 12.sp,
-                                    color = TextPrimary
+                                    color = TextPrimary,
+                                    maxLines = 1
                                 )
                             }
 
                             OutlinedButton(
                                 onClick = viewModel::manualUpdateYtDlp,
                                 enabled = !state.isUpdatingYtDlp,
-                                modifier = Modifier.heightIn(min = 48.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.dp, HairlineBorder)
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, tint = TextSecondary)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (state.isUpdatingYtDlp) "Updating" else "yt-dlp", fontSize = 12.sp, color = TextPrimary)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    if (state.isUpdatingYtDlp) "Updating..." else "Update yt-dlp",
+                                    fontSize = 12.sp,
+                                    color = TextPrimary,
+                                    maxLines = 1
+                                )
                             }
+                        }
 
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text("Chat", fontSize = 12.sp, color = TextSecondary)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Fetch Live Chat Replay (Super Chats & Hype)",
+                                fontSize = 12.sp,
+                                color = TextSecondary,
+                                modifier = Modifier.weight(1f)
+                            )
                             Switch(
                                 checked = state.fetchLiveChatEnabled,
                                 onCheckedChange = viewModel::toggleFetchLiveChat
@@ -5609,4 +5666,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    
