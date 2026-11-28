@@ -2079,19 +2079,12 @@ class YtDlpRepository(
 
         var lastError = "Unable to fetch video metadata"
         for ((label, extractorArg) in clientProfiles) {
-            onStatus("Scanning metadata ($label)...")
-            val infoFile = fetchMetadataPass(
+            onStatus("Fast metadata scan ($label)...")
+            val infoFile = fetchMetadataOnly(
                 normalizedUrl = normalized,
                 workDir = workDir,
                 extractorArg = extractorArg,
-                includeSubs = true,
-                tag = "scan_${label}"
-            ) ?: fetchMetadataPass(
-                normalizedUrl = normalized,
-                workDir = workDir,
-                extractorArg = extractorArg,
-                includeSubs = false,
-                tag = "scan_nosub_${label}"
+                tag = "scan_fast_${label}"
             )
 
             if (infoFile != null && infoFile.exists()) {
@@ -2101,8 +2094,13 @@ class YtDlpRepository(
                         infoJson.optBoolean("is_live", false) ||
                         infoJson.optString("live_status", "") == "was_live"
 
+                    if (kind == SourceKind.YOUTUBE) {
+                        onStatus("Fetching captions...")
+                        fetchSubtitlesBestEffort(normalized, workDir, extractorArg)
+                    }
+
                     var liveChatPath: String? = null
-                    if (kind == SourceKind.YOUTUBE && (fetchLiveChat || isLiveVod)) {
+                    if (kind == SourceKind.YOUTUBE && fetchLiveChat) {
                         onStatus("Fetching live chat replay...")
                         liveChatPath = fetchLiveChatOnly(normalized, workDir, extractorArg)
                     }
@@ -2126,11 +2124,10 @@ class YtDlpRepository(
         AppResult.Error(lastError)
     }
 
-    private fun fetchMetadataPass(
+    private fun fetchMetadataOnly(
         normalizedUrl: String,
         workDir: File,
         extractorArg: String?,
-        includeSubs: Boolean,
         tag: String
     ): File? {
         val req = YoutubeDLRequest(normalizedUrl)
@@ -2139,12 +2136,8 @@ class YtDlpRepository(
         req.addOption("--no-playlist")
         req.addOption("--ignore-errors")
         req.addOption("--no-warnings")
-        if (includeSubs) {
-            req.addOption("--write-auto-subs")
-            req.addOption("--write-subs")
-            req.addOption("--sub-langs", "en,hi,bn,es,ar")
-            req.addOption("--sub-format", "vtt")
-        }
+        req.addOption("--socket-timeout", "15")
+        req.addOption("--no-check-certificates")
         req.addOption("-o", File(workDir, "video.%(ext)s").absolutePath)
         if (extractorArg != null) {
             req.addOption("--extractor-args", extractorArg)
@@ -2159,6 +2152,34 @@ class YtDlpRepository(
         return workDir.listFiles()?.firstOrNull { it.name.endsWith(".info.json") && it.length() > 0L }
     }
 
+    private fun fetchSubtitlesBestEffort(
+        normalizedUrl: String,
+        workDir: File,
+        extractorArg: String?
+    ) {
+        runCatching {
+            val req = YoutubeDLRequest(normalizedUrl)
+            req.addOption("--skip-download")
+            req.addOption("--write-auto-subs")
+            req.addOption("--write-subs")
+            req.addOption("--sub-langs", "en,hi,bn,es,ar")
+            req.addOption("--sub-format", "vtt")
+            req.addOption("--no-playlist")
+            req.addOption("--ignore-errors")
+            req.addOption("--no-warnings")
+            req.addOption("--socket-timeout", "12")
+            req.addOption("--no-check-certificates")
+            req.addOption("-o", File(workDir, "subs.%(ext)s").absolutePath)
+            if (extractorArg != null) {
+                req.addOption("--extractor-args", extractorArg)
+            }
+            if (hasCookies()) {
+                req.addOption("--cookies", cookiesFile.absolutePath)
+            }
+            YoutubeDL.getInstance().execute(req, "scan_subs") { _, _, _ -> }
+        }
+    }
+
     private fun fetchLiveChatOnly(
         normalizedUrl: String,
         workDir: File,
@@ -2171,6 +2192,8 @@ class YtDlpRepository(
             req.addOption("--sub-langs", "live_chat")
             req.addOption("--no-playlist")
             req.addOption("--ignore-errors")
+            req.addOption("--socket-timeout", "15")
+            req.addOption("--no-check-certificates")
             req.addOption("-o", File(workDir, "chat.%(ext)s").absolutePath)
             if (extractorArg != null) {
                 req.addOption("--extractor-args", extractorArg)
@@ -2638,6 +2661,8 @@ class ExportRepository(
             req.addOption("--download-sections", sectionArg)
             req.addOption("-N", "8")
             req.addOption("--no-playlist")
+            req.addOption("--socket-timeout", "15")
+            req.addOption("--no-check-certificates")
             req.addOption("-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best")
             req.addOption("--merge-output-format", "mp4")
             req.addOption("-o", outTemplate)
